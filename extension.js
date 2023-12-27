@@ -6,7 +6,9 @@ const crypto = require('crypto');
 const createDOMPurify = require('dompurify');
 const { JSDOM } = require('jsdom');
 
-const { chatCompletions } = require("./api");
+//const { chatCompletions } = require("./api");
+const OpenAIClient = require("./api");
+
 const { logToFile } = require("./logger");
 
 
@@ -384,7 +386,10 @@ async function getFeedback(context, aggregatedCode = null) {
         
             // Await the OpenAI call
             //pruneChatSession();
-            const response = await chatCompletions(sessionApiKey, ongoingChatSession, options);
+            const openaiClient = new OpenAIClient(sessionApiKey);
+            const response = await openaiClient.chatCompletion(ongoingChatSession, options);
+
+            //const response = await chatCompletions(sessionApiKey, ongoingChatSession, options);
             const message = response.message.content;
             ongoingChatSession.push({ role: 'assistant', content: message });
         

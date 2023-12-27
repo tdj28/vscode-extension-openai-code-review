@@ -40,3 +40,20 @@ OpenAI Mulitple File Code Review
 ```
 
 ![Alt text](image-1.png)
+
+## Running Jest test
+
+To run the tests:
+
+```
+npm test
+```
+
+## To do
+
+* add linting
+
+```
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+```
