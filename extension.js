@@ -300,5 +300,8 @@ function deactivate() {
 module.exports = {
     activate,
     deactivate,
-    addMessageToHistory
+    addMessageToHistory,
+    getCurrentCode,
+    createWebviewContent,
+    handleUserReply,
 };
