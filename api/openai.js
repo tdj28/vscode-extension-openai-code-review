@@ -77,7 +77,9 @@ async function getFeedback(vscode, context, addMessageToHistory, createWebviewCo
             const response = await chatCompletions(sessionApiKey, state.ongoingChatSession);
             const message = response.message.content;
             state.ongoingChatSession.push({ role: 'assistant', content: message });
-            addMessageToHistory('bot', message);
+            addMessageToHistory('bot', message, state.botMessageCounter, state.conversationHistory);
+            // state.botMessageCounter++; // Increment the counter here
+
             state.openaiPanel.webview.html = createWebviewContent(state.conversationHistory);
             console.log('Feedback successfully retrieved and displayed.');
         }

@@ -193,7 +193,7 @@ const getScriptContent = () => {
 };
 
 
-function addMessageToHistory(sender, message) {
+function addMessageToHistory(sender, message, botMessageCounter, conversationHistory) {
     // Convert markdown to HTML for the message content
     const htmlMessage = markdownToHTML(message);
 
@@ -213,48 +213,48 @@ function markdownToHTML(markdown) {
     return marked.parse(markdown);
 }
 
-// function handleUserReply(userReply, context, aggregatedContent) {
-//     console.log("Inside handleUserReply with user reply:", userReply);
-    
-//     if (userReply) {
-//         //userReply = purify(userReply);
-//         ongoingChatSession.push({ role: 'user', content: userReply });
-//         addMessageToHistory('user', userReply);
-//         console.log("Added user reply to session, calling getFeedback next.");
-//         getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
-//         console.log("User reply was empty, clearing session.");
-//         ongoingChatSession = [];
-//     }
-// }
-
-async function handleUserReply(userReply, context, aggregatedContent) {
+function handleUserReply(userReply, context, aggregatedContent) {
     console.log("Inside handleUserReply with user reply:", userReply);
     
     if (userReply) {
+        //userReply = purify(userReply);
         ongoingChatSession.push({ role: 'user', content: userReply });
         addMessageToHistory('user', userReply);
         console.log("Added user reply to session, calling getFeedback next.");
-
-        // Show the spinner before making the API call
-        if (openaiPanel) {
-            openaiPanel.webview.postMessage({ command: 'showSpinner' });
-        }
-
-        // Make the API call and wait for the response
-        const response = await getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
-
-        // Hide the spinner after receiving the response
-        if (openaiPanel) {
-            openaiPanel.webview.postMessage({ command: 'hideSpinner', latestBotMessageId: `latestResponse${botMessageCounter}` });
-        }
-
-        // Now handle the response (e.g., display it in the webview)
-        // ...
-    } else {
+        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
         console.log("User reply was empty, clearing session.");
         ongoingChatSession = [];
     }
 }
+
+// async function handleUserReply(userReply, context, aggregatedContent) {
+//     console.log("Inside handleUserReply with user reply:", userReply);
+    
+//     if (userReply) {
+//         ongoingChatSession.push({ role: 'user', content: userReply });
+//         addMessageToHistory('user', userReply);
+//         console.log("Added user reply to session, calling getFeedback next.");
+
+//         // Show the spinner before making the API call
+//         if (openaiPanel) {
+//             openaiPanel.webview.postMessage({ command: 'showSpinner' });
+//         }
+
+//         // Make the API call and wait for the response
+//         const response = await getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
+
+//         // Hide the spinner after receiving the response
+//         if (openaiPanel) {
+//             openaiPanel.webview.postMessage({ command: 'hideSpinner', latestBotMessageId: `latestResponse${botMessageCounter}` });
+//         }
+
+//         // Now handle the response (e.g., display it in the webview)
+//         // ...
+//     } else {
+//         console.log("User reply was empty, clearing session.");
+//         ongoingChatSession = [];
+//     }
+// }
 
 // Get current code
 function getCurrentCode() {
@@ -333,6 +333,10 @@ function activate(context) {
     });
     
     context.subscriptions.push(reviewAllFilesDisposable);
+
+    context.subscriptions.push(vscode.commands.registerCommand('submitUserReply', (message) => {
+        handleUserReply(message.text, context);
+    }));
 }
 
 function deactivate() {
