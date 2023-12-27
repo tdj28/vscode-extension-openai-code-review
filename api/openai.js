@@ -1,5 +1,5 @@
 const { chatCompletions } = require("./api");
-const { addMessageToHistory } = require("../extension");
+//const { addMessageToHistory } = require("../extension");
 
 let state = {
     openaiPanel: null,
@@ -27,7 +27,7 @@ async function ensureAPIKey(vscode) {
     return sessionApiKey;
 }
 
-async function getFeedback(vscode, context, aggregatedCode = null) {
+async function getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedCode = null) {
     console.log('Starting to get feedback...');
     try {
         let sessionApiKey = await ensureAPIKey(vscode);

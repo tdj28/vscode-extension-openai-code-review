@@ -14,3 +14,5 @@ resources/.arch-internal-preview.css
 .arch-internal-preview.css
 package-lock.json
 .env
+node_modules
+*.vsix

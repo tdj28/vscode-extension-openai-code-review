@@ -7,8 +7,9 @@ const createDOMPurify = require('dompurify');
 const { JSDOM } = require('jsdom');
 
 const { chatCompletions } = require("./api/api");
-const {getFeedback} = require('./api/openai')
-const { logToFile } = require("./logger");
+const {getFeedback} = require('./api/openai');
+const { Agent } = require('http');
+//const { logToFile } = require("./logger");
 
 
 function generateUUID() {
@@ -205,7 +206,7 @@ function addMessageToHistory(sender, message) {
     const anchorTag = sender === 'bot' ? `<a id="latestResponse${botMessageCounter}"></a>` : '';
     // Append the message to the conversation history
     conversationHistory.push(`${anchorTag}<div class="${cssClass}">${htmlMessage}</div>`);
-    logToFile(sender, message, sessionUUID); // Add this line
+    //logToFile(sender, message, sessionUUID); // Add this line
     if (sender === 'bot') {
         botMessageCounter++; // Increment the counter for every bot message
     }
@@ -216,7 +217,7 @@ function markdownToHTML(markdown) {
     return marked.parse(markdown);
 }
 
-function handleUserReply(userReply) {
+function handleUserReply(userReply, context, aggregatedContent) {
     console.log("Inside handleUserReply with user reply:", userReply);
     
     if (userReply) {
@@ -224,8 +225,7 @@ function handleUserReply(userReply) {
         ongoingChatSession.push({ role: 'user', content: userReply });
         addMessageToHistory('user', userReply);
         console.log("Added user reply to session, calling getFeedback next.");
-        getFeedback(); 
-    } else {
+        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
         console.log("User reply was empty, clearing session.");
         ongoingChatSession = [];
     }
@@ -246,20 +246,25 @@ function getCurrentCode() {
 }
 
 
-
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
     console.log('Congratulations, your extension "vscode-openai-api-extension" is now active!');
 
-    let disposable = vscode.commands.registerCommand('vscode-openai-api-extension.reviewSingleFile', function () {
-        getFeedback(context);  
+    let disposable = vscode.commands.registerCommand('vscode-extension-openai-code-review.reviewSingleFile', async function () {
+        // Get the content of the current file
+        let currentContent = getCurrentCode();
+        if (currentContent) {
+            getFeedback(vscode, context, addMessageToHistory, createWebviewContent, currentContent);
+        } else {
+            vscode.window.showInformationMessage('No content found in the current file.');
+        }
     });
 
     context.subscriptions.push(disposable);
 
-    let reviewAllFilesDisposable = vscode.commands.registerCommand('vscode-openai-api-extension.reviewAllFiles', async () => {
+    let reviewAllFilesDisposable = vscode.commands.registerCommand('vscode-extension-openai-code-review.reviewAllFiles', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
             vscode.window.showInformationMessage('No active editor found.');
@@ -284,7 +289,7 @@ function activate(context) {
         }
     
         // Pass the aggregated content to the modified getFeedback function
-        getFeedback(context, aggregatedContent);
+        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
     });
     
     context.subscriptions.push(reviewAllFilesDisposable);

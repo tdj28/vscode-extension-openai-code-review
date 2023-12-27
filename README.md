@@ -19,9 +19,24 @@ npm install -g @vscode/vsce
 if you don't already have that installed, afterwhich you can run
 
 ```
+npm install
 vsce package
 ```
 
-to repackage it. Then install it manually as a local extension.
+to repackage it. Then install it manually as a local extension via Extensions > ... > Install from VSIX:
 
+![Alt text](image.png)
 
+Then run it via command pallete via either:
+
+```
+OpenAI Single File Code Review
+```
+
+or
+
+```
+OpenAI Mulitple File Code Review
+```
+
+![Alt text](image-1.png)
