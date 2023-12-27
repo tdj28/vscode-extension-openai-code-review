@@ -6,10 +6,8 @@ const crypto = require('crypto');
 const createDOMPurify = require('dompurify');
 const { JSDOM } = require('jsdom');
 
-const { chatCompletions } = require("./api/api");
-const {getFeedback} = require('./api/openai');
-const { Agent } = require('http');
-//const { logToFile } = require("./logger");
+const { chatCompletions } = require("./api");
+const { logToFile } = require("./logger");
 
 
 function generateUUID() {
@@ -24,6 +22,19 @@ let botMessageCounter = 0;
 
 let sessionUUID = generateUUID();  // Generate a UUID when the session starts
 
+
+
+// function loadConversationFromFile(filepath) {
+//     fs.readFile(filepath, 'utf8', (err, data) => {
+//         if (err) {
+//             console.error('Failed to read log file', err);
+//             return;
+//         }
+//         const logEntries = data.trim().split('\n').map(JSON.parse);  // Split by newline and parse each line to get an array of objects
+//         ongoingChatSession = logEntries.map(entry => ({ role: entry.sender, content: entry.message }));  // Convert to the format used by ongoingChatSession
+//         sessionUUID = logEntries[0].sessionUUID;  // Update session UUID to the one from the log file
+//     });
+// }
 
 
 function getNonce() {
@@ -192,8 +203,42 @@ const getScriptContent = () => {
     `;
 };
 
+const htmlContent = createWebviewContent();
 
-function addMessageToHistory(sender, message, botMessageCounter, conversationHistory) {
+// async function ensureAPIKey() {
+//     if (!sessionApiKey) {
+//         sessionApiKey = vscode.workspace.getConfiguration('openai').get('apiKey');
+//     }
+//     if (!sessionApiKey) {
+//         sessionApiKey = await vscode.window.showInputBox({
+//             prompt: 'Please enter your OpenAI API key',
+//             password: true,
+//             ignoreFocusOut: true
+//         });
+//         if (!sessionApiKey) {
+//             throw new Error('OpenAI API key is required!');
+//         }
+//     }
+// }
+
+async function ensureAPIKey() {
+    if (!sessionApiKey) {
+        sessionApiKey = vscode.workspace.getConfiguration('openai').get('apiKey');
+    }
+    if (!sessionApiKey) {
+        sessionApiKey = await vscode.window.showInputBox({
+            prompt: 'Please enter your OpenAI API key',
+            password: true,
+            ignoreFocusOut: true
+        });
+        if (!sessionApiKey) {
+            throw new Error('OpenAI API key is required!');
+        }
+    }
+}
+
+
+function addMessageToHistory(sender, message) {
     // Convert markdown to HTML for the message content
     const htmlMessage = markdownToHTML(message);
 
@@ -202,7 +247,7 @@ function addMessageToHistory(sender, message, botMessageCounter, conversationHis
     const anchorTag = sender === 'bot' ? `<a id="latestResponse${botMessageCounter}"></a>` : '';
     // Append the message to the conversation history
     conversationHistory.push(`${anchorTag}<div class="${cssClass}">${htmlMessage}</div>`);
-    //logToFile(sender, message, sessionUUID); // Add this line
+    logToFile(sender, message, sessionUUID); // Add this line
     if (sender === 'bot') {
         botMessageCounter++; // Increment the counter for every bot message
     }
@@ -213,7 +258,7 @@ function markdownToHTML(markdown) {
     return marked.parse(markdown);
 }
 
-function handleUserReply(userReply, context, aggregatedContent) {
+function handleUserReply(userReply) {
     console.log("Inside handleUserReply with user reply:", userReply);
     
     if (userReply) {
@@ -221,40 +266,12 @@ function handleUserReply(userReply, context, aggregatedContent) {
         ongoingChatSession.push({ role: 'user', content: userReply });
         addMessageToHistory('user', userReply);
         console.log("Added user reply to session, calling getFeedback next.");
-        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
+        getFeedback(); 
+    } else {
         console.log("User reply was empty, clearing session.");
         ongoingChatSession = [];
     }
 }
-
-// async function handleUserReply(userReply, context, aggregatedContent) {
-//     console.log("Inside handleUserReply with user reply:", userReply);
-    
-//     if (userReply) {
-//         ongoingChatSession.push({ role: 'user', content: userReply });
-//         addMessageToHistory('user', userReply);
-//         console.log("Added user reply to session, calling getFeedback next.");
-
-//         // Show the spinner before making the API call
-//         if (openaiPanel) {
-//             openaiPanel.webview.postMessage({ command: 'showSpinner' });
-//         }
-
-//         // Make the API call and wait for the response
-//         const response = await getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
-
-//         // Hide the spinner after receiving the response
-//         if (openaiPanel) {
-//             openaiPanel.webview.postMessage({ command: 'hideSpinner', latestBotMessageId: `latestResponse${botMessageCounter}` });
-//         }
-
-//         // Now handle the response (e.g., display it in the webview)
-//         // ...
-//     } else {
-//         console.log("User reply was empty, clearing session.");
-//         ongoingChatSession = [];
-//     }
-// }
 
 // Get current code
 function getCurrentCode() {
@@ -270,6 +287,123 @@ function getCurrentCode() {
     return null;
 }
 
+async function getFeedback(context, aggregatedCode = null) {
+    console.log("Inside getFeedback");
+    await ensureAPIKey();
+    console.log("Got the session key");
+    const code = aggregatedCode || getCurrentCode();
+    if (!code) {
+        console.log("No active editor or code found.");
+        if (ongoingChatSession.length == 0) {
+            console.log("No ongoing chat session found, leaving.");
+            return;
+        }
+
+    }
+    console.log("Successfully fetched current code.");
+
+    if (code) {
+
+		const initialMessage = 
+			{ role: "user",
+              content: `
+                Take a deep breath, and think about the code I will provide.
+                Please review this code and make suggestions as if you were
+                a critical and highly experienced senior software engineer.
+                Provide precise crystal clear code examples where relevant.
+                Do not hesitate to suggest using advanced algorithms where
+                it would make sense. Assume I'm an apt engineer who can take
+                critical constructive feedback and can take extremely technical
+                highly advanced suggestions.: ${code}
+                ` 
+            };
+
+        if (ongoingChatSession.length === 0) {
+            // If this is the first message in the chat session.
+            ongoingChatSession.push(initialMessage);
+        }
+    }
+
+    if (code || ongoingChatSession.length > 0) {
+        console.log("Code or ongoing chat session found, proceeding.");
+		const options = {
+			temperature: 0.8,
+			max_tokens: 4000,
+            stream: false,
+		  };
+
+        //vscode.window.showInformationMessage(message);
+        // Create or reveal the webview
+        console.log("Creating or revealing the webview.");
+        if (openaiPanel) {
+            // Bring the existing panel to focus
+            openaiPanel.reveal(vscode.ViewColumn.Beside);
+        } else {
+            // Create a new panel
+            openaiPanel = vscode.window.createWebviewPanel(
+                'openaiOutput',
+                'OpenAI Feedback',
+                vscode.ViewColumn.Beside,
+                { enableScripts: true,
+                  retainContextWhenHidden: true, }
+            );
+
+            openaiPanel.onDidDispose(() => {
+                openaiPanel = null;
+                conversationHistory = [];
+                ongoingChatSession = [];
+                botMessageCounter = 0;
+            }, null, context.subscriptions);
+    
+            // Add a message listener to the webview panel
+            openaiPanel.webview.onDidReceiveMessage(
+                message => {
+                    console.log("Received message:", message);
+                    console.log("Received message with command:", message.command);
+                    switch (message.command) {
+                        case 'userReply':
+                            handleUserReply(message.text);
+                            return;
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
+            console.log("Registered message listener for webview.");
+        }
+    
+        console.log("Initiating API call.");
+        if (ongoingChatSession.length <= 1){
+            openaiPanel.webview.html = createWebviewContent();  
+            
+        } 
+
+        try {
+            // Start spinner
+            openaiPanel.webview.postMessage({ command: 'showSpinner' });
+        
+            // Await the OpenAI call
+            //pruneChatSession();
+            const response = await chatCompletions(sessionApiKey, ongoingChatSession, options);
+            const message = response.message.content;
+            ongoingChatSession.push({ role: 'assistant', content: message });
+        
+            // Update the webview content
+            addMessageToHistory('bot', message);
+            openaiPanel.webview.html = createWebviewContent(conversationHistory);
+        } catch (err) {
+            // Handle error
+            vscode.window.showErrorMessage("Error communicating with OpenAI" + err);
+            console.error("Error creating chat completion:", err.response?.data || err.message);
+        } finally {
+            // Hide spinner
+            openaiPanel.webview.postMessage({
+                command: 'hideSpinner',
+                latestBotMessageId: `latestResponse${botMessageCounter - 1}`
+            });
+        }
+    }
+}
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -277,29 +411,9 @@ function getCurrentCode() {
 function activate(context) {
     console.log('Congratulations, your extension "vscode-openai-api-extension" is now active!');
 
-    // // Initialize the webview panel here
-    // openaiPanel = vscode.window.createWebviewPanel(
-    //     'openaiPreview', // Identifies the type of the webview. Used internally
-    //     'OpenAI Preview', // Title of the panel displayed to the user
-    //     vscode.ViewColumn.Beside, // Editor column to show the new webview panel in.
-    //     {
-    //         // Enable scripts in the webview
-    //         enableScripts: true
-    //     }
-    // );
-
-    // openaiPanel.webview.html = htmlContent; // Set the HTML content for the webview
-    // openaiPanel.webview.postMessage({ command: 'showSpinner' }); // Post the message to show the spinner
-
-    let disposable = vscode.commands.registerCommand('vscode-extension-openai-code-review.reviewSingleFile', async function () {
-        // Get the content of the current file
-        let currentContent = getCurrentCode();
-        if (currentContent) {
-            //openaiPanel.webview.postMessage({ command: 'showSpinner' });
-            getFeedback(vscode, context, addMessageToHistory, createWebviewContent, currentContent);
-        } else {
-            vscode.window.showInformationMessage('No content found in the current file.');
-        }
+    let disposable = vscode.commands.registerCommand('vscode-extension-openai-code-review.reviewSingleFile', function () {
+        getFeedback(context);  
+		// vscode.window.showInformationMessage('Hello World from vscode-openai-api-extension!');
     });
 
     context.subscriptions.push(disposable);
@@ -327,16 +441,12 @@ function activate(context) {
             const document = await vscode.workspace.openTextDocument(file);
             aggregatedContent += document.getText() + '\n\n'; // Separate files with newlines
         }
-        openaiPanel.webview.postMessage({ command: 'showSpinner' });
+    
         // Pass the aggregated content to the modified getFeedback function
-        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
+        getFeedback(context, aggregatedContent);
     });
     
     context.subscriptions.push(reviewAllFilesDisposable);
-
-    context.subscriptions.push(vscode.commands.registerCommand('submitUserReply', (message) => {
-        handleUserReply(message.text, context);
-    }));
 }
 
 function deactivate() {
@@ -348,9 +458,5 @@ function deactivate() {
 
 module.exports = {
     activate,
-    deactivate,
-    addMessageToHistory,
-    getCurrentCode,
-    createWebviewContent,
-    handleUserReply,
+    deactivate
 };
