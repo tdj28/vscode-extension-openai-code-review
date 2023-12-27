@@ -8,6 +8,8 @@ let state = {
     botMessageCounter: 0
 };
 
+
+
 async function ensureAPIKey(vscode) {
     console.log('Ensuring API key is available...');
     let sessionApiKey = vscode.workspace.getConfiguration('openai').get('apiKey');
@@ -50,7 +52,25 @@ async function getFeedback(vscode, context, addMessageToHistory, createWebviewCo
             if (state.openaiPanel) {
                 state.openaiPanel.reveal(vscode.ViewColumn.Beside);
             } else {
-                state.openaiPanel = createNewWebviewPanel(vscode, context, state);
+
+                // Initialize the webview panel here
+                state.openaiPanel = vscode.window.createWebviewPanel(
+                    'openaiPreview', // Identifies the type of the webview. Used internally
+                    'OpenAI Preview', // Title of the panel displayed to the user
+                    vscode.ViewColumn.Beside, // Editor column to show the new webview panel in.
+                    {
+                        // Enable scripts in the webview
+                        enableScripts: true
+                    }
+                );
+
+                const htmlContent = createWebviewContent();
+
+
+                state.openaiPanel.webview.html = htmlContent; // Set the HTML content for the webview
+                state.openaiPanel.webview.postMessage({ command: 'showSpinner' }); // Post the message to show the spinner
+
+                //state.openaiPanel = createNewWebviewPanel(vscode, context, state);
             }
 
             state.openaiPanel.webview.postMessage({ command: 'showSpinner' });

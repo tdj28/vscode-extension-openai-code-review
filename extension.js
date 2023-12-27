@@ -192,10 +192,6 @@ const getScriptContent = () => {
     `;
 };
 
-const htmlContent = createWebviewContent();
-
-
-
 
 function addMessageToHistory(sender, message) {
     // Convert markdown to HTML for the message content
@@ -217,15 +213,44 @@ function markdownToHTML(markdown) {
     return marked.parse(markdown);
 }
 
-function handleUserReply(userReply, context, aggregatedContent) {
+// function handleUserReply(userReply, context, aggregatedContent) {
+//     console.log("Inside handleUserReply with user reply:", userReply);
+    
+//     if (userReply) {
+//         //userReply = purify(userReply);
+//         ongoingChatSession.push({ role: 'user', content: userReply });
+//         addMessageToHistory('user', userReply);
+//         console.log("Added user reply to session, calling getFeedback next.");
+//         getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
+//         console.log("User reply was empty, clearing session.");
+//         ongoingChatSession = [];
+//     }
+// }
+
+async function handleUserReply(userReply, context, aggregatedContent) {
     console.log("Inside handleUserReply with user reply:", userReply);
     
     if (userReply) {
-        //userReply = purify(userReply);
         ongoingChatSession.push({ role: 'user', content: userReply });
         addMessageToHistory('user', userReply);
         console.log("Added user reply to session, calling getFeedback next.");
-        getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);    } else {
+
+        // Show the spinner before making the API call
+        if (openaiPanel) {
+            openaiPanel.webview.postMessage({ command: 'showSpinner' });
+        }
+
+        // Make the API call and wait for the response
+        const response = await getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
+
+        // Hide the spinner after receiving the response
+        if (openaiPanel) {
+            openaiPanel.webview.postMessage({ command: 'hideSpinner', latestBotMessageId: `latestResponse${botMessageCounter}` });
+        }
+
+        // Now handle the response (e.g., display it in the webview)
+        // ...
+    } else {
         console.log("User reply was empty, clearing session.");
         ongoingChatSession = [];
     }
@@ -252,10 +277,25 @@ function getCurrentCode() {
 function activate(context) {
     console.log('Congratulations, your extension "vscode-openai-api-extension" is now active!');
 
+    // // Initialize the webview panel here
+    // openaiPanel = vscode.window.createWebviewPanel(
+    //     'openaiPreview', // Identifies the type of the webview. Used internally
+    //     'OpenAI Preview', // Title of the panel displayed to the user
+    //     vscode.ViewColumn.Beside, // Editor column to show the new webview panel in.
+    //     {
+    //         // Enable scripts in the webview
+    //         enableScripts: true
+    //     }
+    // );
+
+    // openaiPanel.webview.html = htmlContent; // Set the HTML content for the webview
+    // openaiPanel.webview.postMessage({ command: 'showSpinner' }); // Post the message to show the spinner
+
     let disposable = vscode.commands.registerCommand('vscode-extension-openai-code-review.reviewSingleFile', async function () {
         // Get the content of the current file
         let currentContent = getCurrentCode();
         if (currentContent) {
+            //openaiPanel.webview.postMessage({ command: 'showSpinner' });
             getFeedback(vscode, context, addMessageToHistory, createWebviewContent, currentContent);
         } else {
             vscode.window.showInformationMessage('No content found in the current file.');
@@ -287,7 +327,7 @@ function activate(context) {
             const document = await vscode.workspace.openTextDocument(file);
             aggregatedContent += document.getText() + '\n\n'; // Separate files with newlines
         }
-    
+        openaiPanel.webview.postMessage({ command: 'showSpinner' });
         // Pass the aggregated content to the modified getFeedback function
         getFeedback(vscode, context, addMessageToHistory, createWebviewContent, aggregatedContent);
     });
